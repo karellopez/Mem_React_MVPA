@@ -110,6 +110,18 @@ train_mask_base = ismember(conditions, string(train_labels)) & ismember(runs, tr
 print_cond_counts(conditions, train_mask_base, 'Training set before TrainFilter');
 print_run_cond_counts(conditions, runs, train_mask_base, 'Training per run before TrainFilter');
 
+% Report how many trials exist for each testing specification before any
+% additional filters. This helps verify that beta file loading worked
+% for the cross-classification data as well.
+for ii = 1:size(xclass_specs,1)
+    t_lbls = string(xclass_specs{ii,1});
+    t_runs = xclass_specs{ii,2};
+    tg     = xclass_specs{ii,3};
+    base_mask = ismember(conditions, t_lbls) & ismember(runs, t_runs);
+    print_cond_counts(conditions, base_mask, sprintf('Test set %s before filters', tg));
+    print_run_cond_counts(conditions, runs, base_mask, sprintf('Test per run before filters %s', tg));
+end
+
 % Convert trial condition strings ("*_faces" vs "*_scenes") into binary
 % labels expected by the Decoding Toolbox. Faces -> +1, Scenes -> -1.
 isFace = contains(conditions,'_faces');
@@ -165,12 +177,16 @@ print_run_cond_counts(conditions, runs, train_mask, 'Training per run after filt
 % Ensure every requested training run has at least one trial
 for rr = train_runs(:)'
     if sum(train_mask & runs==rr)==0
-        error('mvpa_MR:noTrainTrials','No training trials in run %d after filtering', rr);
+        error('mvpa_MR:noTrainTrials', ...
+            'No training trials for %s in run %d after filtering', ...
+            strjoin(string(train_labels), ', '), rr);
     end
 end
 
 if ~any(train_mask)
-    error('mvpa_MR:noTrainTrials','No training trials remain after filtering');
+    error('mvpa_MR:noTrainTrials', ...
+        'No training trials remain after filtering for %s in runs %s', ...
+        strjoin(string(train_labels), ', '), mat2str(train_runs));
 end
 
 [cv_res, cv_cm] = run_cv_block(betaFiles, labels, runs, train_mask, cfg, opt);
@@ -198,9 +214,11 @@ for i = 1:size(xclass_specs,1)
     end
     print_cond_counts(conditions, test_mask_all, sprintf('Test set %s after filters', tag));
     if ~any(test_mask_all)
-        error('mvpa_MR:noTestTrials','No test trials remain for %s after filtering', tag);
+        error('mvpa_MR:noTestTrials', ...
+            'No test trials remain for %s (%s) in runs %s after filtering', ...
+            tag, strjoin(test_labels, ', '), mat2str(test_runs));
     end
-    xclass_out.(tag) = run_xclass_per_runs(betaFiles, labels, runs, train_mask, test_mask_all, test_runs, cfg, tag, out_dir, opt);
+    xclass_out.(tag) = run_xclass_per_runs(betaFiles, labels, runs, train_mask, test_mask_all, test_runs, test_labels, cfg, tag, out_dir, opt);
 end
 
 %% -------- Summary table --------
@@ -273,7 +291,7 @@ cv_res.cfg     = cfg;
 cv_res.cm      = cm;
 end
 
-function outStruct = run_xclass_per_runs(betaFiles, labels, runs, tr_mask, te_mask_all, run_list, cfg, tag, out_dir, opt)
+function outStruct = run_xclass_per_runs(betaFiles, labels, runs, tr_mask, te_mask_all, run_list, test_labels, cfg, tag, out_dir, opt)
 % Train on all trials in tr_mask and test separately on each run in
 % run_list for the given set of labels. Results are averaged across runs.
 outStruct = struct();
@@ -290,7 +308,7 @@ for k = 1:numel(run_list)
     r = run_list(k);
     idx_test = find(te_mask_all & runs==r);
     if isempty(idx_test)
-        warning('No test trials for %s in run %d', tag, r);
+        warning('No test trials for %s (%s) in run %d', tag, strjoin(test_labels, ', '), r);
         cm = nan(2); vec = cm(:)';
     else
         keep_idx = unique([idx_train; idx_test]);
