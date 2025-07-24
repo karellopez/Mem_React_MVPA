@@ -98,6 +98,15 @@ conditions = conditions(ok);
 runs       = runs(ok);
 Tbl        = T(ok,:);  % table aligned with filtered vectors
 
+% Informative count of trials per condition
+if isempty(betaFiles)
+    error('mvpa_MR:noTrials','No valid trials found after filtering beta files');
+end
+[uConds,~,cidx] = unique(conditions);
+for ui = 1:numel(uConds)
+    fprintf('Trials for %s: %d\n', uConds(ui), sum(cidx==ui));
+end
+
 % Convert trial condition strings ("*_faces" vs "*_scenes") into binary
 % labels expected by the Decoding Toolbox. Faces -> +1, Scenes -> -1.
 isFace = contains(conditions,'_faces');
@@ -146,6 +155,10 @@ if opt.BalanceTrain
     train_mask = keep;
 end
 
+if ~any(train_mask)
+    error('mvpa_MR:noTrainTrials','No training trials remain after filtering');
+end
+
 [cv_res, cv_cm] = run_cv_block(betaFiles, labels, runs, train_mask, cfg, opt);
 % cv_res contains the full TDT output and cfg used for the CV step, while
 % cv_cm is a convenient 2x2 confusion matrix summarising performance.
@@ -168,6 +181,9 @@ for i = 1:size(xclass_specs,1)
     if ~isempty(fieldnames(test_filter))
         keep_test = apply_filters(Tbl, test_filter);
         test_mask_all = test_mask_all & keep_test;
+    end
+    if ~any(test_mask_all)
+        error('mvpa_MR:noTestTrials','No test trials remain for %s after filtering', tag);
     end
     xclass_out.(tag) = run_xclass_per_runs(betaFiles, labels, runs, train_mask, test_mask_all, test_runs, cfg, tag, out_dir, opt);
 end
