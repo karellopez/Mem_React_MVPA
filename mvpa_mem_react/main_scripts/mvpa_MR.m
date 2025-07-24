@@ -98,14 +98,11 @@ conditions = conditions(ok);
 runs       = runs(ok);
 Tbl        = T(ok,:);  % table aligned with filtered vectors
 
-% Informative count of trials per condition
+% Informative count of trials per condition at the raw level
 if isempty(betaFiles)
     error('mvpa_MR:noTrials','No valid trials found after filtering beta files');
 end
-[uConds,~,cidx] = unique(conditions);
-for ui = 1:numel(uConds)
-    fprintf('Trials for %s: %d\n', uConds(ui), sum(cidx==ui));
-end
+print_cond_counts(conditions,true(size(conditions)), 'Initial trials available');
 
 % Convert trial condition strings ("*_faces" vs "*_scenes") into binary
 % labels expected by the Decoding Toolbox. Faces -> +1, Scenes -> -1.
@@ -155,6 +152,9 @@ if opt.BalanceTrain
     train_mask = keep;
 end
 
+% Report how many trials per condition will be used for training
+print_cond_counts(conditions, train_mask, 'Training set after filters');
+
 if ~any(train_mask)
     error('mvpa_MR:noTrainTrials','No training trials remain after filtering');
 end
@@ -182,6 +182,7 @@ for i = 1:size(xclass_specs,1)
         keep_test = apply_filters(Tbl, test_filter);
         test_mask_all = test_mask_all & keep_test;
     end
+    print_cond_counts(conditions, test_mask_all, sprintf('Test set %s after filters', tag));
     if ~any(test_mask_all)
         error('mvpa_MR:noTestTrials','No test trials remain for %s after filtering', tag);
     end
@@ -459,5 +460,18 @@ for ii = 1:numel(fn)
     else
         error('Unsupported filter type for field %s', f);
     end
+end
+
+end
+
+function print_cond_counts(cond_names, mask, header)
+% Utility to print number of trials per condition after applying a mask
+if nargin < 3, header = ''; end
+if ~isempty(header)
+    fprintf('%s\n', header);
+end
+u = unique(cond_names(mask));
+for i = 1:numel(u)
+    fprintf('Trials for %s: %d\n', u(i), sum(cond_names(mask)==u(i)));
 end
 end
