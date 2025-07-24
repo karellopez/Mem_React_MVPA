@@ -22,13 +22,11 @@ clc; clear; close all
     % Filter trials by performance
     TrainFilter = struct('source_encoding',{{'hit'}}, ...
                          'item_recognition',{{'hit'}});
-    % runs to include in the model
+    % RUNS
     train_runs   = 1:5;
     
-    % XCLASS model, labels and filters
-        % Here, we set the conditions in which we want to test the model
-        % (one condition per raw). You can also filter trials by
-        % performance in cognitive task. 
+    % Cross-classification specs: {test_labels, test_runs, tag}
+    % Filtros para CV (opcional)
     
     xclass_specs = {
         {'AB_faces','AB_scenes'}, 1:4, 'AB', struct('source_encoding',{{'hit'}}, 'item_recognition',{{'hit'}})

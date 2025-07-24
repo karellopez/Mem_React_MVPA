@@ -1,6 +1,6 @@
 clc;clear;close all
 % --- Required ---------------------------------------------------------
-study_mat   = '/home/karelo/Desktop/Development/scripts_Sabina/AFNI_analysis/5.trial_wise_mat_files/yseg_003_study_data.mat';
+study_mat   = '/home/karelo/Desktop/Development/scripts_Sabina/AFNI_analysis/5.trial_wise_mat_files/yseg_005_study_data.mat';
 mask_file   = '/home/karelo/Desktop/Development/scripts_Sabina/AFNI_analysis/ROIs/mvpa_mask_2_res.nii';
 out_dir     = '/home/karelo/Desktop/Development/MVPA_Merchi/results/';
 
@@ -25,7 +25,7 @@ results = mvpa_MR( ...
 
 clc;clear;close all
 % --- Required ---------------------------------------------------------
-study_mat   = '/home/karelo/Desktop/Development/scripts_Sabina/AFNI_analysis/5.trial_wise_mat_files/yseg_003_study_data.mat';
+study_mat   = '/home/karelo/Desktop/Development/scripts_Sabina/AFNI_analysis/5.trial_wise_mat_files/yseg_005_study_data.mat';
 mask_file   = '/home/karelo/Desktop/Development/scripts_Sabina/AFNI_analysis/ROIs/mvpa_mask_2_res.nii';
 out_dir     = '/home/karelo/Desktop/Development/MVPA_Merchi/results2/';
 
