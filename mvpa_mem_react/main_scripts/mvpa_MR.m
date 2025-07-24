@@ -1,11 +1,15 @@
 function results = mvpa_MR(study_mat_path, mask_file, out_dir, train_labels, train_runs, xclass_specs, varargin)
-% MVPA_MR (Memory Reactivation)  (Author: Karelo López)
+% MVPA_MR (Memory Reactivation)
 % -------------------------------------------------------------------------
-% One-stop function to:
-%   1) Run cross-validation (LOSO by run) within a chosen training set
-%      (e.g., DE_faces vs DE_scenes).
-%   2) Train on that full training set and test (cross-classify) on any
-%      number of other label/run combinations (e.g., AB, AC, etc.), run by run.
+% Wrapper around the Decoding Toolbox that implements the complete analysis
+% pipeline for one subject. The function performs two main steps:
+%   1) Run leave-one-run-out cross‑validation within the specified training
+%      set (for example DE_faces vs DE_scenes).
+%   2) Train on the full training set and cross-classify on any number of
+%      additional label/run combinations (e.g. AB, AC), evaluated run by run.
+%
+% All inputs are plain Matlab types so that the function can be called from
+% a script or parfor loop.
 %
 % INPUTS (required)
 %   study_mat_path : char/string. Path to *_study_data.mat (contains study_data struct)
@@ -39,6 +43,7 @@ function results = mvpa_MR(study_mat_path, mask_file, out_dir, train_labels, tra
 % -------------------------------------------------------------------------
 
 %% -------- Parse inputs --------
+% --- Parse required and optional inputs ------------------------------------
 p = inputParser;
 addRequired(p,'study_mat_path',@(x) ischar(x)||isstring(x));
 addRequired(p,'mask_file',     @(x) ischar(x)||isstring(x));
@@ -60,6 +65,9 @@ opt = p.Results;
 if ~exist(out_dir,'dir'); mkdir(out_dir); end
 
 %% -------- Load study_data --------
+% Each *_study_data.mat file contains a struct array 'study_data' with
+% trial‑wise information and paths to beta images. Here we load it and
+% optionally fix outdated path prefixes.
 S = load(study_mat_path);
 if ~isfield(S,'study_data')
     error('Variable "study_data" not found in %s', study_mat_path);
@@ -90,11 +98,15 @@ conditions = conditions(ok);
 runs       = runs(ok);
 Tbl        = T(ok,:);  % table aligned with filtered vectors
 
-% Labels: 1=faces, -1=scenes
+% Convert trial condition strings ("*_faces" vs "*_scenes") into binary
+% labels expected by the Decoding Toolbox. Faces -> +1, Scenes -> -1.
 isFace = contains(conditions,'_faces');
-labels = double(isFace); labels(labels==0) = -1;
+labels = double(isFace);
+labels(labels==0) = -1;
 
 %% -------- Build cfg --------
+% Start from the TDT defaults (or a user template) and set the basic
+% parameters for an ROI‑based decoding analysis.
 if isempty(opt.CfgTemplate)
     cfg = decoding_defaults;
 else
@@ -113,6 +125,8 @@ cfg.plot_selected_voxels = 0;
 if opt.Overwrite, cfg.results.overwrite = 1; end
 
 %% -------- TRAIN: Cross-validation within train set --------
+% Select the trials used for CV based on the requested labels and runs.
+% Additional user-defined filters can further restrict the training set.
 train_mask = ismember(conditions, string(train_labels)) & ismember(runs, train_runs);
 % extra user-defined filters on training set
 if ~isempty(fieldnames(opt.TrainFilter))
@@ -122,6 +136,8 @@ end
 
 % Optional balance
 if opt.BalanceTrain
+    % Randomly downsample the larger class so that faces and scenes have
+    % equal numbers of trials in the training set.
     idx_f = find(train_mask & labels== 1);
     idx_s = find(train_mask & labels==-1);
     nmin  = min(numel(idx_f), numel(idx_s));
@@ -131,8 +147,13 @@ if opt.BalanceTrain
 end
 
 [cv_res, cv_cm] = run_cv_block(betaFiles, labels, runs, train_mask, cfg, opt);
+% cv_res contains the full TDT output and cfg used for the CV step, while
+% cv_cm is a convenient 2x2 confusion matrix summarising performance.
 
-%% -------- XCLASS: Train on all train set, test per run on specs --------
+%% -------- XCLASS: Train on full training set and test per run --------
+% Each row in xclass_specs describes a cross-classification test. We iterate
+% over them, training on ALL trials selected above and testing on the
+% specified runs for that label set.
 xclass_out = struct();
 for i = 1:size(xclass_specs,1)
     test_labels = string(xclass_specs{i,1});
@@ -152,6 +173,8 @@ for i = 1:size(xclass_specs,1)
 end
 
 %% -------- Summary table --------
+% Combine cross-validation and cross-classification results into a single
+% table with a variety of performance metrics.
 % Compute extended metrics tables
 summary_tbl = build_summary_table(cv_res, xclass_out);
 % Write CSV
@@ -172,7 +195,11 @@ save(fullfile(out_dir,'summary_all.mat'),'results');
 end % main
 
 %% ====================== SUBFUNCTIONS ======================
+% Helper utilities used by the main function. These are kept below to keep the
+% main workflow easy to read.
 function study_data = fix_paths_in_struct(study_data, old_root, new_root)
+% Replace old directory prefixes inside the study_data struct. Useful when
+% moving data between machines.
 fields_ruta = {'beta_files','beta_file','beta','file','fname','path'};
 for f = fields_ruta
     fn = f{1};
@@ -187,7 +214,8 @@ end
 end
 
 function [cv_res, cm] = run_cv_block(betaFiles, labels, runs, tr_mask, cfg, opt)
-% Leave-one-run-out CV within training set
+% Helper that performs leave-one-run-out cross-validation within the
+% specified training mask.
 bF   = betaFiles(tr_mask);
 lab  = labels(tr_mask);
 chnk = runs(tr_mask); % use run as chunk
@@ -215,12 +243,17 @@ cv_res.cm      = cm;
 end
 
 function outStruct = run_xclass_per_runs(betaFiles, labels, runs, tr_mask, te_mask_all, run_list, cfg, tag, out_dir, opt)
+% Train on all trials in tr_mask and test separately on each run in
+% run_list for the given set of labels. Results are averaged across runs.
 outStruct = struct();
 cm_list  = cell(numel(run_list),1);
 vec_list = cell(numel(run_list),1);
 acc_list = cell(numel(run_list),1);
 
 idx_train = find(tr_mask);
+
+% Loop over runs of interest. For each run we build a TDT design that uses
+% all training trials and the trials of the current run as the test set.
 
 for k = 1:numel(run_list)
     r = run_list(k);
@@ -265,9 +298,10 @@ acc_mc = getfield_safe(res,'accuracy_minus_chance',NaN);
 acc_list{k} = acc_mc;
 end
 
+% Aggregate results across runs
 cm_stack  = cat(3, cm_list{:});
 mean_cm   = mean(cm_stack,3,'omitnan');
-vec_stack  = cell2mat(vec_list');
+vec_stack = cell2mat(vec_list');
 mean_vec  = mean(vec_stack,1,'omitnan');
 acc_mean  = mean(cell2mat(acc_list), 'omitnan');
 
@@ -328,8 +362,8 @@ tbl = table(RowID,Type,Tag,AccMinusChance_TDT,BalancedAcc,Sensitivity,Specificit
 end
 
 function m = derive_metrics_from_cm(cm)
-% Derive binary metrics from a 2x2 confusion matrix.
-% If not 2x2, will return NaNs.
+% Utility that computes common binary classification metrics from a 2x2
+% confusion matrix. Returns NaNs if the matrix is invalid.
 m = struct('sensitivity',NaN,'specificity',NaN,'balanced_acc',NaN,'mcc',NaN,'kappa',NaN);
 if ~all(size(cm)==[2 2]) || any(isnan(cm(:)))
     return;
@@ -350,6 +384,7 @@ if (1-pe)~=0, m.kappa = (po - pe)/(1-pe); end
 end
 
 function val = getfield_safe(S, fieldname, default)
+% Helper to read optional fields from the TDT results structure.
 if isfield(S, fieldname)
     val = S.(fieldname).output;
 else
@@ -358,7 +393,9 @@ end
 end
 
 function cm = fetch_cm(res)
-% Get a 2x2 confusion matrix from TDT results, handling the *_plus_undecided variant
+% Extract the 2x2 confusion matrix from TDT results structures. Some
+% configurations produce a *_plus_undecided matrix; this helper deals with
+% both variants and trims any extra rows/columns.
 if isfield(res,'confusion_matrix_plus_undecided')
     C = res.confusion_matrix_plus_undecided.output;
 elseif isfield(res,'confusion_matrix')
