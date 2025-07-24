@@ -213,6 +213,7 @@ for i = 1:size(xclass_specs,1)
         test_mask_all = test_mask_all & keep_test;
     end
     print_cond_counts(conditions, test_mask_all, sprintf('Test set %s after filters', tag));
+    print_run_cond_counts(conditions, runs, test_mask_all, sprintf('Test per run after filters %s', tag));
     if ~any(test_mask_all)
         error('mvpa_MR:noTestTrials', ...
             'No test trials remain for %s (%s) in runs %s after filtering', ...
