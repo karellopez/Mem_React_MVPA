@@ -103,6 +103,12 @@ if isempty(betaFiles)
     error('mvpa_MR:noTrials','No valid trials found after filtering beta files');
 end
 print_cond_counts(conditions,true(size(conditions)), 'Initial trials available');
+print_run_cond_counts(conditions, runs, true(size(conditions)), 'Initial trials per run');
+
+% Count trials for the requested training labels/runs before any user filters
+train_mask_base = ismember(conditions, string(train_labels)) & ismember(runs, train_runs);
+print_cond_counts(conditions, train_mask_base, 'Training set before TrainFilter');
+print_run_cond_counts(conditions, runs, train_mask_base, 'Training per run before TrainFilter');
 
 % Convert trial condition strings ("*_faces" vs "*_scenes") into binary
 % labels expected by the Decoding Toolbox. Faces -> +1, Scenes -> -1.
@@ -154,6 +160,14 @@ end
 
 % Report how many trials per condition will be used for training
 print_cond_counts(conditions, train_mask, 'Training set after filters');
+print_run_cond_counts(conditions, runs, train_mask, 'Training per run after filters');
+
+% Ensure every requested training run has at least one trial
+for rr = train_runs(:)'
+    if sum(train_mask & runs==rr)==0
+        error('mvpa_MR:noTrainTrials','No training trials in run %d after filtering', rr);
+    end
+end
 
 if ~any(train_mask)
     error('mvpa_MR:noTrainTrials','No training trials remain after filtering');
@@ -473,5 +487,22 @@ end
 u = unique(cond_names(mask));
 for i = 1:numel(u)
     fprintf('Trials for %s: %d\n', u(i), sum(cond_names(mask)==u(i)));
+end
+end
+
+function print_run_cond_counts(cond_names, runs, mask, header)
+% Print number of trials per run for each condition given a mask
+if nargin < 4, header = ''; end
+if ~isempty(header)
+    fprintf('%s\n', header);
+end
+u_runs  = unique(runs(mask));
+u_cond  = unique(cond_names(mask));
+for r = u_runs(:)'
+    fprintf('Run %d:\n', r);
+    for c = 1:numel(u_cond)
+        cnt = sum(mask & runs==r & cond_names==u_cond(c));
+        fprintf('  %s: %d\n', u_cond(c), cnt);
+    end
 end
 end
