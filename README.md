@@ -30,3 +30,25 @@ results = mvpa_MR(study_mat, mask_file, out_dir, ...
 
 Ensure that any trial filters are passed through the `TrainFilter` parameter so
 that they are applied during cross‑validation.
+
+## Batch processing example
+To analyse several subjects you can loop over their `*_study_data.mat` files
+and create one output directory per subject. Below is a minimal example using
+MATLAB:
+
+```matlab
+mat_files = { 'subj01_study_data.mat', 'subj02_study_data.mat' };
+mask_file  = 'path/to/roi_mask.nii';
+train_labels = {'DE_faces','DE_scenes'};
+train_runs   = 1:4;
+xclass_specs = { {'AB_faces','AB_scenes'}, 1:4, 'AB' };
+
+for i = 1:numel(mat_files)
+    study_mat = mat_files{i};
+    out_dir = fullfile('results', sprintf('subj%02d', i));
+    mvpa_MR(study_mat, mask_file, out_dir, ...
+            train_labels, train_runs, xclass_specs);
+end
+```
+
+Each subject will have its results stored under `results/subjXX/`.
