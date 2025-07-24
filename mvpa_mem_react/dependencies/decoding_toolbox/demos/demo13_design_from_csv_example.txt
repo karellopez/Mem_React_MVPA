@@ -1,0 +1,5 @@
+file	condition	chunk
+f1a.nii	l1	1
+f1b.nii	l1	2
+f2a.nii	l2	1
+f2b.nii	l2	2

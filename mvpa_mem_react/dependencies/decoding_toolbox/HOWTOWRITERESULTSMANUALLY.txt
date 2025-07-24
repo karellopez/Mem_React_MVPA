@@ -1,0 +1,76 @@
+-----------------------------------------------
+HOW TO WRITE RESULTS MANUALLY INTO BRAIN IMAGES
+-----------------------------------------------
+
+Assume you manually worked on results, for example you converted RSA
+results into your own output or combined results from multiple decoding
+analyses). Now you want to write them to brain volumes using The Decoding
+Toolbox. Here are instructions on how to write your results manually.
+
+What you need to to:
+1. Get a cfg. You can load the original cfg you used to run TDT and
+   everything is fine (usually saved as res_cfg.mat). If you don't have a
+   cfg, then look below to find more information about what steps you
+   need to follow.
+2. Assume you want to call your output 'ensemble_accuracy'. Then set the
+   following fields in cfg:
+       cfg.results.output = {'ensemble_accuracy'};
+       cfg.results.resultsname = {'res_ensemble_accuracy'};
+3. Get your results struct from a previous call of TDT (usually saved as
+   e.g. res_accuracy_minus_chance.mat). If you don't have this, then look 
+   below to find more information about what steps you need to follow.
+4. Assume again you want to call your output 'ensemble_accuracy'. Then
+   set the following field in results:
+       results.ensemble_accuracy.output: place the vector of results here
+          (length of vector must match results.mask_index).
+5. If you want to a clean results struct, remove previously existing
+   results, e.g.: >> results = rmfield(results,'accuracy_minus_chance'); 
+5. Call decoding_write_results(cfg,results)
+6. Enjoy ;)
+
+------------
+Example call
+------------
+load('res_accuracy_minus_chance.mat')
+load('res_cfg.mat')
+cfg.results.output = {'ensemble_accuracy'};
+cfg.results.resultsname = {'res_ensemble_accuracy'};
+results.ensemble_accuracy.output = results.accuracy_minus_chance.output;
+results = rmfield(results,'accuracy_minus_chance');
+decoding_write_results(cfg,results)
+
+-------------------------------------------
+If you don't have a cfg, follow these steps
+-------------------------------------------
+call
+   >> cfg = decoding_defaults;
+and provide the following fields:
+  cfg.result.write: = 0: don't write results
+                    = 1: write mat + img file for SL + ROI
+                    = 2: write only mat file for SL + ROI
+  cfg.results.overwrite = 0: don't overwrite files with same name
+                        = 1: overwrite results 
+  cfg.results.dir: full path (as string) where to save results
+  cfg.design.n_sets = 1;
+  cfg.analysis = 'searchlight'; (or 'ROI' or 'wholebrain')
+  cfg.software = 'SPM12' (or your SPM version or 'AFNI')
+  cfg.files.name{1}: location of reference volume used for defining
+      image space. This usually is a beta volume
+  cfg.files.mask: location of mask volume used (only required if you
+      don't have a results struct)
+
+------------------------------------------------------
+If you don't have a results struct, follow these steps
+------------------------------------------------------
+results.analysis = cfg.analysis;
+results.n_cond: number of labels
+results.n_cond_per_step: number of labels
+results.mask_index: see below
+results.mask_index_each: see below
+    [mask_vol,mask_hdr,sz,mask_vol_each] = load_mask(cfg)
+    results.mask_index = find(mask_vol);
+    results.mask_index_each = cell(1,size(mask_vol_each,4));
+    for i_mask = 1:size(mask_vol_each,4)
+       results.mask_index_each{i_mask} = find(mask_vol_each(:,:,:,i_mask));
+    end
+results.n_decodings = get_n_decodings(cfg,mask_index,mask_index_each,sz);
