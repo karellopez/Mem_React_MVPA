@@ -283,10 +283,8 @@ res = decoding(cfg);
 cm  = fetch_cm(res);
 
 % binomial p-value for accuracy using raw counts of predictions
-pred = res.predicted_labels.output;
-truth = res.true_labels.output;
-if iscell(pred), pred = vertcat(pred{:}); end
-if iscell(truth), truth = vertcat(truth{:}); end
+pred = labelvec_from_output(res.predicted_labels.output);
+truth = labelvec_from_output(res.true_labels.output);
 n_total = numel(pred);
 n_correct = sum(pred == truth);
 acc_p = stats_binomial(n_correct,n_total,0.5,'right');
@@ -346,10 +344,8 @@ for k = 1:numel(run_list)
         res = decoding(cfg);
 cm  = fetch_cm(res);
 vec = cm(:)';
-pred = res.predicted_labels.output;
-tru  = res.true_labels.output;
-if iscell(pred), pred = vertcat(pred{:}); end
-if iscell(tru),  tru  = vertcat(tru{:});  end
+pred = labelvec_from_output(res.predicted_labels.output);
+tru  = labelvec_from_output(res.true_labels.output);
 run_n_total = numel(pred);
 run_n_correct = sum(pred == tru);
 acc_mc = getfield_safe(res,'accuracy_minus_chance',NaN);
@@ -490,6 +486,33 @@ if size(C,1) > 2
     C = C(1:2,:);
 end
 cm = C;
+end
+
+function vec = labelvec_from_output(out)
+% Convert TDT predicted or true label outputs to a numeric vector
+if iscell(out)
+    out = vertcat(out{:});
+end
+if isstruct(out)
+    if isfield(out,'model')
+        vec = [];
+        for m = 1:numel(out.model)
+            if isfield(out.model{m}, 'predicted_labels')
+                vec = [vec; out.model{m}.predicted_labels(:)];
+            elseif isfield(out.model{m}, 'true_labels')
+                vec = [vec; out.model{m}.true_labels(:)];
+            end
+        end
+    elseif isfield(out,'predicted_labels')
+        vec = out.predicted_labels(:);
+    elseif isfield(out,'true_labels')
+        vec = out.true_labels(:);
+    else
+        error('labelvec_from_output: unsupported struct format');
+    end
+else
+    vec = out(:);
+end
 end
 
 function keep = apply_filters(Tsub, filt)
