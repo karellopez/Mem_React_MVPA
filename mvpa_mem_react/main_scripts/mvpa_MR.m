@@ -190,7 +190,7 @@ if ~any(train_mask)
         strjoin(string(train_labels), ', '), mat2str(train_runs));
 end
 
-[cv_res, cv_cm] = run_cv_block(betaFiles, labels, runs, train_mask, cfg, opt);
+[cv_res, cv_cm] = run_cv_block(betaFiles, labels, runs, train_mask, cfg, opt, string(train_labels));
 % cv_res contains the full TDT output and cfg used for the CV step, while
 % cv_cm is a convenient 2x2 confusion matrix summarising performance.
 
@@ -220,7 +220,7 @@ for i = 1:size(xclass_specs,1)
             'No test trials remain for %s (%s) in runs %s after filtering', ...
             tag, strjoin(test_labels, ', '), mat2str(test_runs));
     end
-    xclass_out.(tag) = run_xclass_per_runs(betaFiles, labels, runs, train_mask, test_mask_all, test_runs, test_labels, cfg, tag, out_dir, opt);
+    xclass_out.(tag) = run_xclass_per_runs(betaFiles, labels, runs, train_mask, test_mask_all, test_runs, test_labels, cfg, tag, out_dir, opt, string(test_labels));
 end
 
 %% -------- Summary table --------
@@ -264,7 +264,7 @@ for f = fields_ruta
 end
 end
 
-function [cv_res, cm] = run_cv_block(betaFiles, labels, runs, tr_mask, cfg, opt)
+function [cv_res, cm] = run_cv_block(betaFiles, labels, runs, tr_mask, cfg, opt, label_names)
 % Helper that performs leave-one-run-out cross-validation within the
 % specified training mask.
 bF   = betaFiles(tr_mask);
@@ -282,18 +282,17 @@ cfg.scale.check_datatrans_ok = true;
 res = decoding(cfg);
 cm  = fetch_cm(res);
 
-% binomial p-value for accuracy
-% TDT sometimes returns averaged confusion matrices which can
-% result in non‑integer counts. stats_binomial requires integers, so
-% round to the nearest integer before computing the p-value.
-n_correct = round(sum(diag(cm)));
-n_total   = round(sum(cm(:)));
+% binomial p-value for accuracy using raw counts of predictions
+pred = res.predicted_labels.output;
+truth = res.true_labels.output;
+if iscell(pred), pred = vertcat(pred{:}); end
+if iscell(truth), truth = vertcat(truth{:}); end
+n_total = numel(pred);
+n_correct = sum(pred == truth);
 acc_p = stats_binomial(n_correct,n_total,0.5,'right');
 
 if opt.SavePNGs
-    fig = figure('Visible','off'); heatmap(cm,'Colormap',jet);
-    title('CV confusion matrix');
-    saveas(fig, fullfile(cfg.results.dir, 'CV_confusion.png')); close(fig);
+    save_confusion_fig(cm, label_names, 'CV confusion matrix', fullfile(cfg.results.dir, 'CV_confusion.png'));
 end
 
 cv_res.results = res;
@@ -302,7 +301,7 @@ cv_res.cm      = cm;
 cv_res.acc_p   = acc_p;
 end
 
-function outStruct = run_xclass_per_runs(betaFiles, labels, runs, tr_mask, te_mask_all, run_list, test_labels, cfg, tag, out_dir, opt)
+function outStruct = run_xclass_per_runs(betaFiles, labels, runs, tr_mask, te_mask_all, run_list, test_labels, cfg, tag, out_dir, opt, label_names)
 % Train on all trials in tr_mask and test separately on each run in
 % run_list for the given set of labels. Results are averaged across runs.
 outStruct = struct();
@@ -310,6 +309,8 @@ cm_list  = cell(numel(run_list),1);
 vec_list = cell(numel(run_list),1);
 acc_list = cell(numel(run_list),1);
 auc_list = cell(numel(run_list),1);
+n_corr_list = zeros(numel(run_list),1);
+n_tot_list  = zeros(numel(run_list),1);
 
 idx_train = find(tr_mask);
 
@@ -345,20 +346,26 @@ for k = 1:numel(run_list)
         res = decoding(cfg);
 cm  = fetch_cm(res);
 vec = cm(:)';
+pred = res.predicted_labels.output;
+tru  = res.true_labels.output;
+if iscell(pred), pred = vertcat(pred{:}); end
+if iscell(tru),  tru  = vertcat(tru{:});  end
+run_n_total = numel(pred);
+run_n_correct = sum(pred == tru);
 acc_mc = getfield_safe(res,'accuracy_minus_chance',NaN);
-auc_mc = getfield_safe(res,'AUC_minus_chance',NaN);
+    auc_mc = getfield_safe(res,'AUC_minus_chance',NaN);
 
         save(fullfile(out_dir, sprintf('%s_run%02d_%s.mat', tag, r, 'xclass')), 'res','cfg');
-        if opt.SavePNGs
-            fig = figure('Visible','off'); heatmap(cm,'Colormap',jet);
-            title(sprintf('%s – run %d', tag, r));
-            saveas(fig, fullfile(out_dir, sprintf('%s_run%02d_conf.png', tag, r))); close(fig);
-        end
+    if opt.SavePNGs
+        save_confusion_fig(cm, label_names, sprintf('%s – run %d', tag, r), fullfile(out_dir, sprintf('%s_run%02d_conf.png', tag, r)));
+    end
     end
     cm_list{k}  = cm;
     vec_list{k} = vec;
     acc_list{k} = acc_mc;
     auc_list{k} = auc_mc;
+    n_corr_list(k) = run_n_correct;
+    n_tot_list(k)  = run_n_total;
 end
 
 % Aggregate results across runs
@@ -370,19 +377,13 @@ acc_mean  = mean(cell2mat(acc_list), 'omitnan');
 auc_mean  = mean(cell2mat(auc_list), 'omitnan');
 
 cm_total = sum(cm_stack,3,'omitnan');
-% Non‑integer values can appear when averaging across runs. Round before
-% computing significance so that stats_binomial receives integers.
-n_correct = round(sum(diag(cm_total)));
-n_total   = round(sum(cm_total(:)));
+n_correct = sum(n_corr_list);
+n_total   = sum(n_tot_list);
 acc_p = stats_binomial(n_correct,n_total,0.5,'right');
 
 % Plot & save mean CM for this tag
 if opt.SavePNGs
-    fig = figure('Visible','off');
-    heatmap(mean_cm,'Colormap',jet);
-    title(sprintf('%s – mean confusion matrix', tag));
-    saveas(fig, fullfile(out_dir, sprintf('%s_mean_conf.png', tag)));
-    close(fig);
+    save_confusion_fig(mean_cm, label_names, sprintf('%s – mean confusion matrix', tag), fullfile(out_dir, sprintf('%s_mean_conf.png', tag)));
 end
 
 outStruct.cm_list  = cm_list;
@@ -551,4 +552,27 @@ for r = u_runs(:)'
         fprintf('  %s: %d\n', u_cond(c), cnt);
     end
 end
+end
+
+function save_confusion_fig(cm, label_names, fig_title, out_file)
+% Create a 2x2 confusion matrix plot with informative labels
+fig = figure('Visible','off');
+imagesc(cm);
+colormap(jet);
+colorbar;
+axis equal tight;
+xticks(1:2); yticks(1:2);
+xticklabels(label_names); yticklabels(label_names);
+xlabel('Predicted'); ylabel('True');
+title(fig_title);
+
+labels_cell = {sprintf('Correct %s', label_names(1)), sprintf('Miss. %s as %s', label_names(1), label_names(2));
+               sprintf('Miss. %s as %s', label_names(2), label_names(1)), sprintf('Correct %s', label_names(2))};
+for i = 1:2
+    for j = 1:2
+        text(j, i, labels_cell{i,j}, 'Color','w','FontSize',8,'HorizontalAlignment','center','VerticalAlignment','middle');
+    end
+end
+saveas(fig, out_file);
+close(fig);
 end
