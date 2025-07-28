@@ -139,10 +139,11 @@ end
 cfg.analysis         = 'ROI';
 cfg.files.mask       = mask_file;
 cfg.results.dir      = out_dir;
-cfg.results.output   = {'accuracy','accuracy_minus_chance', ...
+    cfg.results.output   = {'accuracy','accuracy_minus_chance', ...
                           'balanced_accuracy','AUC_minus_chance', ...
                           'confusion_matrix_plus_undecided', ...
-                          'predicted_labels','true_labels'};
+                          'predicted_labels','true_labels', ...
+                          'decision_values'};
 cfg.scale.method     = 'min0max1';
 cfg.scale.estimation = 'all';
 cfg.plot_selected_voxels = 0;
@@ -281,6 +282,11 @@ cfg.scale.check_datatrans_ok = true;
 res = decoding(cfg);
 cm  = fetch_cm(res);
 
+% binomial p-value for accuracy
+n_correct = sum(diag(cm));
+n_total   = sum(cm(:));
+acc_p = stats_binomial(n_correct,n_total,0.5,'right');
+
 if opt.SavePNGs
     fig = figure('Visible','off'); heatmap(cm,'Colormap',jet);
     title('CV confusion matrix');
@@ -290,6 +296,7 @@ end
 cv_res.results = res;
 cv_res.cfg     = cfg;
 cv_res.cm      = cm;
+cv_res.acc_p   = acc_p;
 end
 
 function outStruct = run_xclass_per_runs(betaFiles, labels, runs, tr_mask, te_mask_all, run_list, test_labels, cfg, tag, out_dir, opt)
@@ -299,6 +306,7 @@ outStruct = struct();
 cm_list  = cell(numel(run_list),1);
 vec_list = cell(numel(run_list),1);
 acc_list = cell(numel(run_list),1);
+auc_list = cell(numel(run_list),1);
 
 idx_train = find(tr_mask);
 
@@ -335,6 +343,7 @@ for k = 1:numel(run_list)
 cm  = fetch_cm(res);
 vec = cm(:)';
 acc_mc = getfield_safe(res,'accuracy_minus_chance',NaN);
+auc_mc = getfield_safe(res,'AUC_minus_chance',NaN);
 
         save(fullfile(out_dir, sprintf('%s_run%02d_%s.mat', tag, r, 'xclass')), 'res','cfg');
         if opt.SavePNGs
@@ -345,7 +354,8 @@ acc_mc = getfield_safe(res,'accuracy_minus_chance',NaN);
     end
     cm_list{k}  = cm;
     vec_list{k} = vec;
-acc_list{k} = acc_mc;
+    acc_list{k} = acc_mc;
+    auc_list{k} = auc_mc;
 end
 
 % Aggregate results across runs
@@ -354,6 +364,12 @@ mean_cm   = mean(cm_stack,3,'omitnan');
 vec_stack = cell2mat(vec_list');
 mean_vec  = mean(vec_stack,1,'omitnan');
 acc_mean  = mean(cell2mat(acc_list), 'omitnan');
+auc_mean  = mean(cell2mat(auc_list), 'omitnan');
+
+cm_total = sum(cm_stack,3,'omitnan');
+n_correct = sum(diag(cm_total));
+n_total   = sum(cm_total(:));
+acc_p = stats_binomial(n_correct,n_total,0.5,'right');
 
 % Plot & save mean CM for this tag
 if opt.SavePNGs
@@ -370,6 +386,9 @@ outStruct.mean_cm  = mean_cm;
 outStruct.mean_vec = mean_vec;
 outStruct.acc_list = acc_list;
 outStruct.acc_mean = acc_mean;
+outStruct.auc_list = auc_list;
+outStruct.auc_mean = auc_mean;
+outStruct.acc_p    = acc_p;
 end
 
 function tbl = build_summary_table(cv_res, xclass_out)
@@ -379,6 +398,7 @@ function tbl = build_summary_table(cv_res, xclass_out)
 cm_cv = cv_res.cm; [m_cv] = derive_metrics_from_cm(cm_cv);
 acc_cv  = cv_res.results.accuracy_minus_chance.output;
 auc_cv  = getfield_safe(cv_res.results,'AUC_minus_chance',NaN); %#ok<GFLD>
+acc_p_cv = cv_res.acc_p;
 
 RowID = {'CV'}; Type = {'cv'}; Tag = {'cv'};
 AccMinusChance_TDT = acc_cv;   % direct from TDT
@@ -388,6 +408,7 @@ Specificity    = m_cv.specificity;
 MCC            = m_cv.mcc;
 Kappa          = m_cv.kappa;
 AUCminusChance = auc_cv;
+AccPValue = acc_p_cv;
 
 % ---- XCLASS metrics ----
 fn = fieldnames(xclass_out);
@@ -404,11 +425,12 @@ for i = 1:numel(fn)
     Specificity(end+1,1)    = m.specificity;
     MCC(end+1,1)            = m.mcc;
     Kappa(end+1,1)          = m.kappa;
-    AUCminusChance(end+1,1) = NaN; % add if you later compute AUC for xclass
+    AUCminusChance(end+1,1) = xclass_out.(tag).auc_mean;
+    AccPValue(end+1,1)      = xclass_out.(tag).acc_p;
 end
 
-tbl = table(RowID,Type,Tag,AccMinusChance_TDT,BalancedAcc,Sensitivity,Specificity,MCC,Kappa,AUCminusChance, ...
-             'VariableNames',{'RowID','Type','Tag','AccuracyMinusChance_TDT','BalancedAcc','Sensitivity','Specificity','MCC','Kappa','AUCminusChance'});
+tbl = table(RowID,Type,Tag,AccMinusChance_TDT,BalancedAcc,Sensitivity,Specificity,MCC,Kappa,AUCminusChance,AccPValue, ...
+             'VariableNames',{'RowID','Type','Tag','AccuracyMinusChance_TDT','BalancedAcc','Sensitivity','Specificity','MCC','Kappa','AUCminusChance','AccPValue'});
 end
 
 function m = derive_metrics_from_cm(cm)
