@@ -283,8 +283,11 @@ res = decoding(cfg);
 cm  = fetch_cm(res);
 
 % binomial p-value for accuracy
-n_correct = sum(diag(cm));
-n_total   = sum(cm(:));
+% TDT sometimes returns averaged confusion matrices which can
+% result in non‑integer counts. stats_binomial requires integers, so
+% round to the nearest integer before computing the p-value.
+n_correct = round(sum(diag(cm)));
+n_total   = round(sum(cm(:)));
 acc_p = stats_binomial(n_correct,n_total,0.5,'right');
 
 if opt.SavePNGs
@@ -367,8 +370,10 @@ acc_mean  = mean(cell2mat(acc_list), 'omitnan');
 auc_mean  = mean(cell2mat(auc_list), 'omitnan');
 
 cm_total = sum(cm_stack,3,'omitnan');
-n_correct = sum(diag(cm_total));
-n_total   = sum(cm_total(:));
+% Non‑integer values can appear when averaging across runs. Round before
+% computing significance so that stats_binomial receives integers.
+n_correct = round(sum(diag(cm_total)));
+n_total   = round(sum(cm_total(:)));
 acc_p = stats_binomial(n_correct,n_total,0.5,'right');
 
 % Plot & save mean CM for this tag
