@@ -146,7 +146,7 @@ cfg.results.dir      = out_dir;
                           'decision_values'};
 cfg.scale.method     = 'min0max1';
 cfg.scale.estimation = 'all';
-cfg.plot_selected_voxels = 0;
+cfg.plot_selected_voxels = 500;
 if opt.Overwrite, cfg.results.overwrite = 1; end
 
 %% -------- TRAIN: Cross-validation within train set --------
