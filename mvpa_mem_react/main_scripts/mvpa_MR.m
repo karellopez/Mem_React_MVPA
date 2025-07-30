@@ -381,9 +381,6 @@ for k = 1:numel(run_list)
             perm_cfg = rmfield(perm_cfg,'design');
             perm_cfg.design.function.name = 'make_design_xclass';
             perm_cfg.results.setwise = 1;
-            % With one sample per chunk we must assume exchangeable
-            % observations, otherwise make_design_permutation errors out.
-            perm_cfg.permute.exchangeable = 1;
             perm_cfg.design = make_design_permutation(perm_cfg, n_perm, 1);
             perm_res = decoding(perm_cfg);
             stats_cfg = cfg;
