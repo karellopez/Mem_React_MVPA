@@ -39,6 +39,8 @@ clear; clc; close all
 %% Process each subject and store mean confusion matrices
 cm_means = struct();
 group_table = table();
+
+delete(gcp("nocreate"));
 parpool("Processes")
 parfor i = 1:numel(mat_files)
 
@@ -57,7 +59,7 @@ parfor i = 1:numel(mat_files)
             'SavePNGs',     true, ...
             'Overwrite',    true, ...
             'TrainFilter', TrainFilter, ...
-            'FixOldPath',   {'/home/karelo/Escritorio/','/home/karelo/Desktop/'} );
+            'FixOldPath',   {'/home/karelo/Escritorio/','/home/karelo/Desktop/'} ); % Esta linea de 'FixOldPath'no la necesitas. Es solo un apaño para reemplazar strings en el study mat file cuando los paths eran de otro ordenador
 
         % Append the final table for this subject to the group table
         final_tbl = res.final;
