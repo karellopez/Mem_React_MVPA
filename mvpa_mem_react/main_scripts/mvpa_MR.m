@@ -282,13 +282,13 @@ cfg.scale.check_datatrans_ok = true;
 res = decoding(cfg);
 cm  = fetch_cm(res);
 
-% binomial p-value for accuracy
-% TDT sometimes returns averaged confusion matrices which can
-% result in non‑integer counts. stats_binomial requires integers, so
-% round to the nearest integer before computing the p-value.
-n_correct = round(sum(diag(cm)));
-n_total   = round(sum(cm(:)));
-acc_p = stats_binomial(n_correct,n_total,0.5,'right');
+% binomial p-value for accuracy using TDT's decoding_statistics
+stats_cfg = cfg;
+stats_cfg.stats.test   = 'binomial';
+stats_cfg.stats.tail   = 'right';
+stats_cfg.stats.output = 'accuracy_minus_chance';
+stats_cfg.stats.chancelevel = 50; % percent
+acc_p = decoding_statistics(stats_cfg, res);
 
 if opt.SavePNGs
     fig = figure('Visible','off'); heatmap(cm,'Colormap',jet);
@@ -310,6 +310,7 @@ cm_list  = cell(numel(run_list),1);
 vec_list = cell(numel(run_list),1);
 acc_list = cell(numel(run_list),1);
 auc_list = cell(numel(run_list),1);
+p_list = cell(numel(run_list),1);
 
 idx_train = find(tr_mask);
 
@@ -343,10 +344,19 @@ for k = 1:numel(run_list)
         if opt.Overwrite, cfg.results.overwrite = 1; end
 
         res = decoding(cfg);
-cm  = fetch_cm(res);
-vec = cm(:)';
-acc_mc = getfield_safe(res,'accuracy_minus_chance',NaN);
-auc_mc = getfield_safe(res,'AUC_minus_chance',NaN);
+        cm  = fetch_cm(res);
+        vec = cm(:)';
+
+        % p-value using decoding_statistics for this run
+        stats_cfg = cfg;
+        stats_cfg.stats.test   = 'binomial';
+        stats_cfg.stats.tail   = 'right';
+        stats_cfg.stats.output = 'accuracy_minus_chance';
+        stats_cfg.stats.chancelevel = 50; % percent
+        p_run = decoding_statistics(stats_cfg, res);
+
+        acc_mc = getfield_safe(res,'accuracy_minus_chance',NaN);
+        auc_mc = getfield_safe(res,'AUC_minus_chance',NaN);
 
         save(fullfile(out_dir, sprintf('%s_run%02d_%s.mat', tag, r, 'xclass')), 'res','cfg');
     if opt.SavePNGs
@@ -359,6 +369,7 @@ auc_mc = getfield_safe(res,'AUC_minus_chance',NaN);
     vec_list{k} = vec;
     acc_list{k} = acc_mc;
     auc_list{k} = auc_mc;
+    p_list{k}   = p_run;
 end
 
 % Aggregate results across runs
@@ -393,6 +404,7 @@ outStruct.acc_list = acc_list;
 outStruct.acc_mean = acc_mean;
 outStruct.auc_list = auc_list;
 outStruct.auc_mean = auc_mean;
+outStruct.p_list   = p_list;
 outStruct.acc_p    = acc_p;
 end
 
