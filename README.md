@@ -15,7 +15,8 @@ provides a reproducible pipeline for each subject.
 - Outputs confusion matrices, PNG visualisations and a summary CSV with several
   performance metrics.
 - Also writes `summary_final.csv`, a single-row table containing every metric
-  computed for that subject (per run and averaged).
+  computed for that subject. Metrics are grouped by type with mean values
+  listed before the per-run results.
 - Computes binomial p-values via TDT's `decoding_statistics`.
 
 ## Usage
