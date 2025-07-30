@@ -38,27 +38,71 @@ clear; clc; close all
 
 %% Process each subject and store mean confusion matrices
 cm_means = struct();
-group_table = {};
-for i = 1:numel(mat_files)
+group_table = table();
+delete(gcp("nocreate"));
+parpool("Processes")
+parfor i = 1:numel(mat_files)
 
-    % 
+    % mat files
     study_mat = mat_files{i};
-
+    % Sub name (adapta esta parte)
     [path,sub] = fileparts(study_mat);
-
-
-    out_dir   = fullfile('results', sprintf('subj%02d', i));
-        if ~exist(out_dir, 'dir'); mkdir(out_dir); end
+    sub_name = strrep (sub,'_study_data','');
+    % Sub output folder
+    sub_out_dir = fullfile(output_dir, sub_name);if ~exist(sub_out_dir, 'dir'); mkdir(sub_out_dir); end
 
         res = mvpa_MR( ...
-            study_mat, mask_file, out_dir, ...
+            study_mat, mask_file, sub_out_dir, ...
             train_labels, train_runs, xclass_specs, ...
             'BalanceTrain', false, ...
             'SavePNGs',     true, ...
             'Overwrite',    true, ...
             'TrainFilter', TrainFilter, ...
-            'FixOldPath',   {'/home/karelo/Escritorio/','/home/karelo/Desktop/'} );
-    
+            'FixOldPath',   {'/home/karelo/Escritorio/','/home/karelo/Desktop/'} ); % Esta linea no te hace falta 
+
+        % Append the final table for this subject to the group table
+        final_tbl = res.final;
+        final_tbl.Subject = string(sub_name);
+        % Place the Subject column first in the table
+        final_tbl = movevars(final_tbl, 'Subject', 'Before', 1);
+        group_table = [group_table; final_tbl];
+
          close all
 
 end
+
+% Save group-level summary table with one row per subject
+writetable(group_table, fullfile(output_dir, 'group_summary.csv'));
+save(fullfile(output_dir, 'group_summary.mat'), 'group_table', 'cm_means');
+
+
+% Nomenclatura de resultados:
+
+CV = Cross validation (Primer modelo cde training y testing de los DEs)
+
+CV_CM_CC_faces = CrossValidation_ConfussionMatrix_CorrectClassified_faces
+CV_CM_MC_faces = CrossValidation_ConfussionMatrix_MissClassified_faces
+CV_CM_MC_scenes = CrossValidation_ConfussionMatrix_MissClassified_scenes
+CV_CM_CC_scenes = CrossValidation_ConfussionMatrix_CorrectClassified_scenes
+
+XCLASS AB (Testing sobre los AB)
+
+XCLASS_AB_Mean_CC_faces = TestingAB_ConfussionMatrix_CorrectClassified_faces
+XCLASS_AB_Mean_MC_faces = TestingAB_ConfussionMatrix_MissClassified_faces
+XCLASS_AB_Mean_MC_scenes = TestingAB_ConfussionMatrix_MissClassified_scenes
+XCLASS_AB_Mean_CC_scenes = TestingAB_ConfussionMatrix_CorrectClassified_scenes
+
+Nota: La misma logica aplica a cada run
+
+XCLASS AC (Testig sobre los AC)
+
+XCLASS_AC_Mean_CC_faces = TestingAC_ConfussionMatrix_CorrectClassified_faces
+XCLASS_AC_Mean_MC_faces = TestingAC_ConfussionMatrix_MissClassified_faces
+XCLASS_AC_Mean_MC_scenes = TestingAC_ConfussionMatrix_MissClassified_scenes
+XCLASS_AC_Mean_CC_scenes = TestingAC_ConfussionMatrix_CorrectClassified_scenes
+
+Nota: La misma logica aplica a cada run
+
+
+
+

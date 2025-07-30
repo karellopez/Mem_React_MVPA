@@ -74,3 +74,35 @@ end
 % Save group-level summary table with one row per subject
 writetable(group_table, fullfile(output_dir, 'group_summary.csv'));
 save(fullfile(output_dir, 'group_summary.mat'), 'group_table', 'cm_means');
+
+
+% Nomenclatura de resultados:
+
+% CV = Cross validation (Primer modelo cde training y testing de los DEs)
+% 
+% CV_CM_CC_faces = CrossValidation_ConfussionMatrix_CorrectClassified_faces
+% CV_CM_MC_faces = CrossValidation_ConfussionMatrix_MissClassified_faces
+% CV_CM_MC_scenes = CrossValidation_ConfussionMatrix_MissClassified_scenes
+% CV_CM_CC_scenes = CrossValidation_ConfussionMatrix_CorrectClassified_scenes
+% 
+% XCLASS AB (Testing sobre los AB)
+% 
+% XCLASS_AB_Mean_CC_faces = TestingAB_ConfussionMatrix_CorrectClassified_faces
+% XCLASS_AB_Mean_MC_faces = TestingAB_ConfussionMatrix_MissClassified_faces
+% XCLASS_AB_Mean_MC_scenes = TestingAB_ConfussionMatrix_MissClassified_scenes
+% XCLASS_AB_Mean_CC_scenes = TestingAB_ConfussionMatrix_CorrectClassified_scenes
+% 
+% Nota: La misma logica aplica a cada run
+% 
+% XCLASS AC (Testig sobre los AC)
+% 
+% XCLASS_AC_Mean_CC_faces = TestingAC_ConfussionMatrix_CorrectClassified_faces
+% XCLASS_AC_Mean_MC_faces = TestingAC_ConfussionMatrix_MissClassified_faces
+% XCLASS_AC_Mean_MC_scenes = TestingAC_ConfussionMatrix_MissClassified_scenes
+% XCLASS_AC_Mean_CC_scenes = TestingAC_ConfussionMatrix_CorrectClassified_scenes
+% 
+% Nota: La misma logica aplica a cada run
+
+
+
+
