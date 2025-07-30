@@ -31,9 +31,6 @@ function results = mvpa_MR(study_mat_path, mask_file, out_dir, train_labels, tra
 %   'SavePNGs'      (true)   : save confusion matrices as PNGs
 %   'Overwrite'     (true)   : overwrite existing results
 %   'FixOldPath'    ({old,new}) : replace old root path by new inside study_data
-%   'PermTest'      (struct) : struct with fields CV and Xclass specifying
-%                               the number of permutations for permutation
-%                               testing (0 = none)
 %
 % OUTPUT
 %   results : struct with fields
@@ -61,12 +58,9 @@ addParameter(p,'SavePNGs',true,@islogical);
 addParameter(p,'Overwrite',true,@islogical);
 addParameter(p,'TrainFilter',struct(),@isstruct);
 addParameter(p,'FixOldPath',{},@(x) (iscell(x)&&numel(x)==2)||isempty(x));
-addParameter(p,'PermTest',struct('CV',0,'Xclass',0),@isstruct);
 
 parse(p,study_mat_path,mask_file,out_dir,train_labels,train_runs,xclass_specs,varargin{:});
 opt = p.Results;
-if ~isfield(opt.PermTest,'CV'); opt.PermTest.CV = 0; end
-if ~isfield(opt.PermTest,'Xclass'); opt.PermTest.Xclass = 0; end
 
 if ~exist(out_dir,'dir'); mkdir(out_dir); end
 
@@ -196,7 +190,7 @@ if ~any(train_mask)
         strjoin(string(train_labels), ', '), mat2str(train_runs));
 end
 
-[cv_res, cv_cm] = run_cv_block(betaFiles, labels, runs, train_mask, cfg, opt, opt.PermTest.CV);
+[cv_res, cv_cm] = run_cv_block(betaFiles, labels, runs, train_mask, cfg, opt);
 % cv_res contains the full TDT output and cfg used for the CV step, while
 % cv_cm is a convenient 2x2 confusion matrix summarising performance.
 
@@ -226,7 +220,7 @@ for i = 1:size(xclass_specs,1)
             'No test trials remain for %s (%s) in runs %s after filtering', ...
             tag, strjoin(test_labels, ', '), mat2str(test_runs));
     end
-    xclass_out.(tag) = run_xclass_per_runs(betaFiles, labels, runs, train_mask, test_mask_all, test_runs, test_labels, cfg, tag, out_dir, opt, opt.PermTest.Xclass);
+    xclass_out.(tag) = run_xclass_per_runs(betaFiles, labels, runs, train_mask, test_mask_all, test_runs, test_labels, cfg, tag, out_dir, opt);
 end
 
 %% -------- Summary table --------
@@ -279,7 +273,7 @@ for f = fields_ruta
 end
 end
 
-function [cv_res, cm] = run_cv_block(betaFiles, labels, runs, tr_mask, cfg, opt, n_perm)
+function [cv_res, cm] = run_cv_block(betaFiles, labels, runs, tr_mask, cfg, opt)
 % Helper that performs leave-one-run-out cross-validation within the
 % specified training mask.
 bF   = betaFiles(tr_mask);
@@ -297,26 +291,13 @@ cfg.scale.check_datatrans_ok = true;
 res = decoding(cfg);
 cm  = fetch_cm(res);
 
-if n_perm > 0
-    perm_cfg = cfg;
-    perm_cfg = rmfield(perm_cfg,'design');
-    perm_cfg.design.function.name = 'make_design_cv';
-    perm_cfg.results.setwise = 1;
-    perm_cfg.design = make_design_permutation(perm_cfg,n_perm,1);
-    perm_res = decoding(perm_cfg);
-    stats_cfg = cfg;
-    stats_cfg.stats.test   = 'permutation';
-    stats_cfg.stats.tail   = 'right';
-    stats_cfg.stats.output = 'accuracy_minus_chance';
-    acc_p = decoding_statistics(stats_cfg, res, perm_res);
-else
-    stats_cfg = cfg;
-    stats_cfg.stats.test   = 'binomial';
-    stats_cfg.stats.tail   = 'right';
-    stats_cfg.stats.output = 'accuracy_minus_chance';
-    stats_cfg.stats.chancelevel = 50; % percent
-    acc_p = decoding_statistics(stats_cfg, res);
-end
+% binomial p-value for accuracy using TDT's decoding_statistics
+stats_cfg = cfg;
+stats_cfg.stats.test   = 'binomial';
+stats_cfg.stats.tail   = 'right';
+stats_cfg.stats.output = 'accuracy_minus_chance';
+stats_cfg.stats.chancelevel = 50; % percent
+acc_p = decoding_statistics(stats_cfg, res);
 
 if opt.SavePNGs
     fig = figure('Visible','off'); heatmap(cm,'Colormap',jet);
@@ -330,7 +311,7 @@ cv_res.cm      = cm;
 cv_res.acc_p   = acc_p;
 end
 
-function outStruct = run_xclass_per_runs(betaFiles, labels, runs, tr_mask, te_mask_all, run_list, test_labels, cfg, tag, out_dir, opt, n_perm)
+function outStruct = run_xclass_per_runs(betaFiles, labels, runs, tr_mask, te_mask_all, run_list, test_labels, cfg, tag, out_dir, opt)
 % Train on all trials in tr_mask and test separately on each run in
 % run_list for the given set of labels. Results are averaged across runs.
 outStruct = struct();
@@ -376,26 +357,13 @@ for k = 1:numel(run_list)
         cm  = fetch_cm(res);
         vec = cm(:)';
 
-        if n_perm > 0
-            perm_cfg = cfg;
-            perm_cfg = rmfield(perm_cfg,'design');
-            perm_cfg.design.function.name = 'make_design_xclass';
-            perm_cfg.results.setwise = 1;
-            perm_cfg.design = make_design_permutation(perm_cfg, n_perm, 1);
-            perm_res = decoding(perm_cfg);
-            stats_cfg = cfg;
-            stats_cfg.stats.test   = 'permutation';
-            stats_cfg.stats.tail   = 'right';
-            stats_cfg.stats.output = 'accuracy_minus_chance';
-            p_run = decoding_statistics(stats_cfg, res, perm_res);
-        else
-            stats_cfg = cfg;
-            stats_cfg.stats.test   = 'binomial';
-            stats_cfg.stats.tail   = 'right';
-            stats_cfg.stats.output = 'accuracy_minus_chance';
-            stats_cfg.stats.chancelevel = 50; % percent
-            p_run = decoding_statistics(stats_cfg, res);
-        end
+        % p-value using decoding_statistics for this run
+        stats_cfg = cfg;
+        stats_cfg.stats.test   = 'binomial';
+        stats_cfg.stats.tail   = 'right';
+        stats_cfg.stats.output = 'accuracy_minus_chance';
+        stats_cfg.stats.chancelevel = 50; % percent
+        p_run = decoding_statistics(stats_cfg, res);
 
         acc_mc   = getfield_safe(res,'accuracy_minus_chance',NaN);
         acc_tdt  = getfield_safe(res,'accuracy',NaN);

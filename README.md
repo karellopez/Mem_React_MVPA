@@ -17,7 +17,7 @@ provides a reproducible pipeline for each subject.
 - Also writes `summary_final.csv`, a single-row table containing every metric
   computed for that subject. Metrics are grouped by type with mean values
   listed before the per-run results.
-- Computes binomial or permutation p-values via TDT's `decoding_statistics`.
+- Computes binomial p-values via TDT's `decoding_statistics`.
 
 ## Usage
 ```
@@ -29,8 +29,7 @@ xclass_specs = {
 results = mvpa_MR(study_mat, mask_file, out_dir, ...
                   train_labels, train_runs, xclass_specs, ...
                   'TrainFilter', TrainFilter, ...
-                  'BalanceTrain', false, ...
-                  'PermTest', struct('CV', 1000, 'Xclass', 1000));
+                  'BalanceTrain', false);
 ```
 
 Ensure that any trial filters are passed through the `TrainFilter` parameter so
