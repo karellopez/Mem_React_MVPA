@@ -14,6 +14,7 @@ provides a reproducible pipeline for each subject.
 - Cross‑classification on additional label/run splits.
 - Outputs confusion matrices, PNG visualisations and a summary CSV with several
   performance metrics.
+- Computes binomial p-values via TDT's `decoding_statistics`.
 
 ## Usage
 ```
