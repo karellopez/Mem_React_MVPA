@@ -236,7 +236,7 @@ catch
 end
 
 % ---- Wide final table with one row per subject ----
-final_tbl = build_final_subject_table(cv_res, xclass_out);
+final_tbl = build_final_subject_table(cv_res, xclass_out, train_labels, xclass_specs);
 try
     writetable(final_tbl, fullfile(out_dir,'summary_final.csv'));
 catch
@@ -463,12 +463,31 @@ tbl = table(RowID,Type,Tag,AccMinusChance_TDT,BalancedAcc,Sensitivity,Specificit
              'VariableNames',{'RowID','Type','Tag','AccuracyMinusChance_TDT','BalancedAcc','Sensitivity','Specificity','MCC','Kappa','AUCminusChance','AccPValue'});
 end
 
-function tbl = build_final_subject_table(cv_res, xclass_out)
+function tbl = build_final_subject_table(cv_res, xclass_out, train_labels, xclass_specs)
 % Build a wide one-row table with all metrics for this subject. Metrics are
 % grouped so that mean values appear before individual run results.
 
 names = {};
 values = [];
+
+    function suffix = get_suffix(label)
+        parts = split(string(label), '_');
+        suffix = parts{end};
+    end
+
+% Determine label suffixes from the training labels. The first two entries
+% define the class names used in the confusion matrix columns.
+tr_suffixes = cellfun(@(x) get_suffix(x), train_labels, 'UniformOutput', false);
+if numel(tr_suffixes) >= 1
+    label_a = tr_suffixes{1};
+else
+    label_a = 'class1';
+end
+if numel(tr_suffixes) >= 2
+    label_b = tr_suffixes{2};
+else
+    label_b = 'class2';
+end
 
 %% ---- CV metrics ----
 acc      = getfield_safe(cv_res.results,'accuracy',NaN);
@@ -495,10 +514,10 @@ add_group('CV','AUCminusChance', mean(auc_mc, 'omitnan'), auc_mc);
 cm = cv_res.cm;
 m  = derive_metrics_from_cm(cm);
 names{end+1} = 'CV_PValue';          values(end+1) = cv_res.acc_p;
-names{end+1} = 'CV_CM_11';           values(end+1) = cm(1,1);
-names{end+1} = 'CV_CM_12';           values(end+1) = cm(1,2);
-names{end+1} = 'CV_CM_21';           values(end+1) = cm(2,1);
-names{end+1} = 'CV_CM_22';           values(end+1) = cm(2,2);
+names{end+1} = sprintf('CV_CM_CC_%s', label_a);   values(end+1) = cm(1,1);
+names{end+1} = sprintf('CV_CM_MC_%s', label_a);   values(end+1) = cm(1,2);
+names{end+1} = sprintf('CV_CM_MC_%s', label_b);  values(end+1) = cm(2,1);
+names{end+1} = sprintf('CV_CM_CC_%s', label_b);  values(end+1) = cm(2,2);
 names{end+1} = 'CV_BalancedAcc_CM';  values(end+1) = m.balanced_acc;
 names{end+1} = 'CV_Sensitivity';     values(end+1) = m.sensitivity;
 names{end+1} = 'CV_Specificity';     values(end+1) = m.specificity;
@@ -535,23 +554,33 @@ for t = 1:numel(tags)
     prefix = sprintf('XCLASS_%s', tag);
     add_group(prefix,'AccMinusChance', X.acc_mean, acc_list);
     add_group(prefix,'AUCminusChance', X.auc_mean, auc_list);
-    add_group(prefix,'PValue',         X.acc_p,    p_list);
+    add_group(prefix,'PValue',         mean(p_list,'omitnan'), p_list);
     add_group(prefix,'BalancedAcc',    m_tag.balanced_acc, bal_list);
     add_group(prefix,'Sensitivity',    m_tag.sensitivity,  sens_list);
     add_group(prefix,'Specificity',    m_tag.specificity,  spec_list);
     add_group(prefix,'MCC',            m_tag.mcc,         mcc_list);
     add_group(prefix,'Kappa',          m_tag.kappa,       kappa_list);
 
-    names{end+1} = sprintf('%s_Mean_CM11', prefix); values(end+1) = X.mean_cm(1,1);
-    names{end+1} = sprintf('%s_Mean_CM12', prefix); values(end+1) = X.mean_cm(1,2);
-    names{end+1} = sprintf('%s_Mean_CM21', prefix); values(end+1) = X.mean_cm(2,1);
-    names{end+1} = sprintf('%s_Mean_CM22', prefix); values(end+1) = X.mean_cm(2,2);
+    % Get label suffixes for this tag from the specification
+    lbl_idx = find(strcmp(xclass_specs(:,3), tag), 1);
+    t_labels = xclass_specs{lbl_idx,1};
+    f_lbl = get_suffix(t_labels{1});
+    if numel(t_labels) >= 2
+        s_lbl = get_suffix(t_labels{2});
+    else
+        s_lbl = 'class2';
+    end
+
+    names{end+1} = sprintf('%s_Mean_CC_%s', prefix, f_lbl); values(end+1) = X.mean_cm(1,1);
+    names{end+1} = sprintf('%s_Mean_MC_%s', prefix, f_lbl); values(end+1) = X.mean_cm(1,2);
+    names{end+1} = sprintf('%s_Mean_MC_%s', prefix, s_lbl); values(end+1) = X.mean_cm(2,1);
+    names{end+1} = sprintf('%s_Mean_CC_%s', prefix, s_lbl); values(end+1) = X.mean_cm(2,2);
     for r = 1:numel(cm_list)
         cm_r = cm_list{r};
-        names{end+1} = sprintf('%s_Run%02d_CM11', prefix, r); values(end+1) = cm_r(1,1);
-        names{end+1} = sprintf('%s_Run%02d_CM12', prefix, r); values(end+1) = cm_r(1,2);
-        names{end+1} = sprintf('%s_Run%02d_CM21', prefix, r); values(end+1) = cm_r(2,1);
-        names{end+1} = sprintf('%s_Run%02d_CM22', prefix, r); values(end+1) = cm_r(2,2);
+        names{end+1} = sprintf('%s_Run%02d_CC_%s', prefix, r, f_lbl); values(end+1) = cm_r(1,1);
+        names{end+1} = sprintf('%s_Run%02d_MC_%s', prefix, r, f_lbl); values(end+1) = cm_r(1,2);
+        names{end+1} = sprintf('%s_Run%02d_MC_%s', prefix, r, s_lbl); values(end+1) = cm_r(2,1);
+        names{end+1} = sprintf('%s_Run%02d_CC_%s', prefix, r, s_lbl); values(end+1) = cm_r(2,2);
     end
 end
 
