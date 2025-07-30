@@ -38,7 +38,7 @@ clear; clc; close all
 
 %% Process each subject and store mean confusion matrices
 cm_means = struct();
-group_table = {};
+group_table = table();
 for i = 1:numel(mat_files)
 
     % mat files
@@ -57,7 +57,16 @@ for i = 1:numel(mat_files)
             'Overwrite',    true, ...
             'TrainFilter', TrainFilter, ...
             'FixOldPath',   {'/home/karelo/Escritorio/','/home/karelo/Desktop/'} );
-    
+
+        % Append the final table for this subject to the group table
+        final_tbl = res.final;
+        final_tbl.Subject = string(sub_name);
+        group_table = [group_table; final_tbl];
+
          close all
 
 end
+
+% Save group-level summary table with one row per subject
+writetable(group_table, fullfile(output_dir, 'group_summary.csv'));
+save(fullfile(output_dir, 'group_summary.mat'), 'group_table', 'cm_means');
