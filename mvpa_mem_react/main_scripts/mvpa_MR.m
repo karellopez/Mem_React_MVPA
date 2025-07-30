@@ -315,11 +315,12 @@ function outStruct = run_xclass_per_runs(betaFiles, labels, runs, tr_mask, te_ma
 % Train on all trials in tr_mask and test separately on each run in
 % run_list for the given set of labels. Results are averaged across runs.
 outStruct = struct();
-cm_list  = cell(numel(run_list),1);
-vec_list = cell(numel(run_list),1);
-acc_list = cell(numel(run_list),1);
-auc_list = cell(numel(run_list),1);
-p_list = cell(numel(run_list),1);
+cm_list      = cell(numel(run_list),1);
+vec_list     = cell(numel(run_list),1);
+acc_list     = cell(numel(run_list),1);     % accuracy minus chance
+acc_tdt_list = cell(numel(run_list),1);     % raw accuracy from TDT
+auc_list     = cell(numel(run_list),1);
+p_list       = cell(numel(run_list),1);
 
 idx_train = find(tr_mask);
 
@@ -364,8 +365,9 @@ for k = 1:numel(run_list)
         stats_cfg.stats.chancelevel = 50; % percent
         p_run = decoding_statistics(stats_cfg, res);
 
-        acc_mc = getfield_safe(res,'accuracy_minus_chance',NaN);
-        auc_mc = getfield_safe(res,'AUC_minus_chance',NaN);
+        acc_mc   = getfield_safe(res,'accuracy_minus_chance',NaN);
+        acc_tdt  = getfield_safe(res,'accuracy',NaN);
+        auc_mc   = getfield_safe(res,'AUC_minus_chance',NaN);
 
         save(fullfile(out_dir, sprintf('%s_run%02d_%s.mat', tag, r, 'xclass')), 'res','cfg');
     if opt.SavePNGs
@@ -374,11 +376,12 @@ for k = 1:numel(run_list)
         saveas(fig, fullfile(out_dir, sprintf('%s_run%02d_conf.png', tag, r))); close(fig);
     end
     end
-    cm_list{k}  = cm;
-    vec_list{k} = vec;
-    acc_list{k} = acc_mc;
-    auc_list{k} = auc_mc;
-    p_list{k}   = p_run;
+    cm_list{k}      = cm;
+    vec_list{k}     = vec;
+    acc_list{k}     = acc_mc;
+    acc_tdt_list{k} = acc_tdt;
+    auc_list{k}     = auc_mc;
+    p_list{k}       = p_run;
 end
 
 % Aggregate results across runs
@@ -386,8 +389,9 @@ cm_stack  = cat(3, cm_list{:});
 mean_cm   = mean(cm_stack,3,'omitnan');
 vec_stack = cell2mat(vec_list');
 mean_vec  = mean(vec_stack,1,'omitnan');
-acc_mean  = mean(cell2mat(acc_list), 'omitnan');
-auc_mean  = mean(cell2mat(auc_list), 'omitnan');
+acc_mean      = mean(cell2mat(acc_list), 'omitnan');
+acc_tdt_mean  = mean(cell2mat(acc_tdt_list), 'omitnan');
+auc_mean      = mean(cell2mat(auc_list), 'omitnan');
 
 cm_total = sum(cm_stack,3,'omitnan');
 % Non‑integer values can appear when averaging across runs. Round before
@@ -409,8 +413,10 @@ outStruct.cm_list  = cm_list;
 outStruct.vec_list = vec_list;
 outStruct.mean_cm  = mean_cm;
 outStruct.mean_vec = mean_vec;
-outStruct.acc_list = acc_list;
-outStruct.acc_mean = acc_mean;
+outStruct.acc_list     = acc_list;
+outStruct.acc_mean     = acc_mean;
+outStruct.acc_list_tdt = acc_tdt_list;
+outStruct.acc_mean_tdt = acc_tdt_mean;
 outStruct.auc_list = auc_list;
 outStruct.auc_mean = auc_mean;
 outStruct.p_list   = p_list;
@@ -494,22 +500,13 @@ acc      = getfield_safe(cv_res.results,'accuracy',NaN);
 acc_mc   = getfield_safe(cv_res.results,'accuracy_minus_chance',NaN);
 bal_acc  = getfield_safe(cv_res.results,'balanced_accuracy',NaN);
 auc_mc   = getfield_safe(cv_res.results,'AUC_minus_chance',NaN);
-n_cv = numel(acc_mc);
+n_cv = numel(acc_mc); %#ok<NASGU>
 
-% Helper to append mean and per-run values in one go
-    function add_group(prefix, metric, mean_val, run_vals)
-        names{end+1} = sprintf('%s_Mean_%s', prefix, metric);
-        values(end+1) = mean_val;
-        for rr = 1:numel(run_vals)
-            names{end+1} = sprintf('%s_Run%02d_%s', prefix, rr, metric);
-            values(end+1) = run_vals(rr);
-        end
-    end
-
-add_group('CV','Accuracy',       mean(acc,    'omitnan'), acc);
-add_group('CV','AccMinusChance', mean(acc_mc, 'omitnan'), acc_mc);
-add_group('CV','BalancedAcc',    mean(bal_acc,'omitnan'), bal_acc);
-add_group('CV','AUCminusChance', mean(auc_mc, 'omitnan'), auc_mc);
+% Add only mean values for CV metrics (per-run values are not informative)
+names{end+1} = 'CV_Mean_Accuracy';       values(end+1) = mean(acc,'omitnan');
+names{end+1} = 'CV_Mean_AccMinusChance'; values(end+1) = mean(acc_mc,'omitnan');
+names{end+1} = 'CV_Mean_BalancedAcc';    values(end+1) = mean(bal_acc,'omitnan');
+names{end+1} = 'CV_Mean_AUCminusChance'; values(end+1) = mean(auc_mc,'omitnan');
 
 cm = cv_res.cm;
 m  = derive_metrics_from_cm(cm);
@@ -524,14 +521,24 @@ names{end+1} = 'CV_Specificity';     values(end+1) = m.specificity;
 names{end+1} = 'CV_MCC';             values(end+1) = m.mcc;
 names{end+1} = 'CV_Kappa';           values(end+1) = m.kappa;
 
+    function add_group(prefix, metric, mean_val, run_vals)
+        names{end+1} = sprintf('%s_Mean_%s', prefix, metric);
+        values(end+1) = mean_val;
+        for rr = 1:numel(run_vals)
+            names{end+1} = sprintf('%s_Run%02d_%s', prefix, rr, metric);
+            values(end+1) = run_vals(rr);
+        end
+    end
+
 %% ---- XCLASS metrics ----
 tags = fieldnames(xclass_out);
 for t = 1:numel(tags)
     tag = tags{t};
     X = xclass_out.(tag);
-    acc_list = cell2mat(X.acc_list);
-    auc_list = cell2mat(X.auc_list);
-    p_list   = cell2mat(X.p_list);
+    acc_list       = cell2mat(X.acc_list);      % accuracy minus chance
+    acc_tdt_list   = cell2mat(X.acc_list_tdt);  % raw accuracy
+    auc_list       = cell2mat(X.auc_list);
+    p_list         = cell2mat(X.p_list);
     cm_list  = X.cm_list;
 
     bal_list  = NaN(size(acc_list));
@@ -552,8 +559,9 @@ for t = 1:numel(tags)
     m_tag = derive_metrics_from_cm(X.mean_cm);
 
     prefix = sprintf('XCLASS_%s', tag);
-    add_group(prefix,'AccMinusChance', X.acc_mean, acc_list);
-    add_group(prefix,'AUCminusChance', X.auc_mean, auc_list);
+    add_group(prefix,'Accuracy',        X.acc_mean_tdt, acc_tdt_list);
+    add_group(prefix,'AccMinusChance',  X.acc_mean,     acc_list);
+    add_group(prefix,'AUCminusChance',  X.auc_mean,     auc_list);
     add_group(prefix,'PValue',         mean(p_list,'omitnan'), p_list);
     add_group(prefix,'BalancedAcc',    m_tag.balanced_acc, bal_list);
     add_group(prefix,'Sensitivity',    m_tag.sensitivity,  sens_list);
