@@ -41,16 +41,17 @@ cm_means = struct();
 group_table = {};
 for i = 1:numel(mat_files)
 
-    % mat files
+    % 
     study_mat = mat_files{i};
-    % Sub name (adapta esta parte)
+
     [path,sub] = fileparts(study_mat);
-    sub_name = strrep (sub,'_study_data','');
-    % Sub output folder
-    sub_out_dir = fullfile(output_dir, sub_name);if ~exist(sub_out_dir, 'dir'); mkdir(sub_out_dir); end
+
+
+    out_dir   = fullfile('results', sprintf('subj%02d', i));
+        if ~exist(out_dir, 'dir'); mkdir(out_dir); end
 
         res = mvpa_MR( ...
-            study_mat, mask_file, sub_out_dir, ...
+            study_mat, mask_file, out_dir, ...
             train_labels, train_runs, xclass_specs, ...
             'BalanceTrain', false, ...
             'SavePNGs',     true, ...
