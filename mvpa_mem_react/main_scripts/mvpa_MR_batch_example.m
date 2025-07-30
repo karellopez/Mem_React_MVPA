@@ -35,6 +35,7 @@ clear; clc; close all
 
 %% Process each subject and store mean confusion matrices
 cm_means = struct();
+group_table = {};
 for i = 1:numel(mat_files)
     study_mat = mat_files{i};
     out_dir   = fullfile('results', sprintf('subj%02d', i));
@@ -58,7 +59,6 @@ for i = 1:numel(mat_files)
         tag = tags{t};
         cm_means(i).(tag) = res.xclass.(tag).mean_cm;
     end
- 
-end
+     group_table{i}  = res.table;
 
-save('confusion_means.mat','cm_means');
+end
