@@ -61,6 +61,8 @@ for i = 1:numel(mat_files)
         % Append the final table for this subject to the group table
         final_tbl = res.final;
         final_tbl.Subject = string(sub_name);
+        % Place the Subject column first in the table
+        final_tbl = movevars(final_tbl, 'Subject', 'Before', 1);
         group_table = [group_table; final_tbl];
 
          close all
