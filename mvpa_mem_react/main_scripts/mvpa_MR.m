@@ -235,11 +235,20 @@ catch
     warning('Could not write CSV');
 end
 
+% ---- Wide final table with one row per subject ----
+final_tbl = build_final_subject_table(cv_res, xclass_out);
+try
+    writetable(final_tbl, fullfile(out_dir,'summary_final.csv'));
+catch
+    warning('Could not write final summary CSV');
+end
+
 %% -------- Pack results --------
 results.cv      = cv_res;
 results.cv.cm   = cv_cm;
 results.xclass  = xclass_out;
 results.table   = summary_tbl;
+results.final   = final_tbl;
 
 save(fullfile(out_dir,'summary_all.mat'),'results');
 
@@ -452,6 +461,117 @@ end
 
 tbl = table(RowID,Type,Tag,AccMinusChance_TDT,BalancedAcc,Sensitivity,Specificity,MCC,Kappa,AUCminusChance,AccPValue, ...
              'VariableNames',{'RowID','Type','Tag','AccuracyMinusChance_TDT','BalancedAcc','Sensitivity','Specificity','MCC','Kappa','AUCminusChance','AccPValue'});
+end
+
+function tbl = build_final_subject_table(cv_res, xclass_out)
+% Build a wide one-row table with all metrics for this subject.
+
+names = {};
+values = [];
+
+%% ---- CV metrics per run ----
+acc      = getfield_safe(cv_res.results,'accuracy',NaN);
+acc_mc   = getfield_safe(cv_res.results,'accuracy_minus_chance',NaN);
+bal_acc  = getfield_safe(cv_res.results,'balanced_accuracy',NaN);
+auc_mc   = getfield_safe(cv_res.results,'AUC_minus_chance',NaN);
+
+n_cv = numel(acc_mc);
+for i = 1:n_cv
+    names{end+1} = sprintf('CV_Run%02d_Accuracy', i);
+    values(end+1) = acc(i);
+    names{end+1} = sprintf('CV_Run%02d_AccMinusChance', i);
+    values(end+1) = acc_mc(i);
+    names{end+1} = sprintf('CV_Run%02d_BalancedAcc', i);
+    values(end+1) = bal_acc(i);
+    names{end+1} = sprintf('CV_Run%02d_AUCminusChance', i);
+    values(end+1) = auc_mc(i);
+end
+
+names{end+1} = 'CV_Mean_Accuracy';       values(end+1) = mean(acc,    'omitnan');
+names{end+1} = 'CV_Mean_AccMinusChance'; values(end+1) = mean(acc_mc, 'omitnan');
+names{end+1} = 'CV_Mean_BalancedAcc';    values(end+1) = mean(bal_acc,'omitnan');
+names{end+1} = 'CV_Mean_AUCminusChance'; values(end+1) = mean(auc_mc, 'omitnan');
+
+cm = cv_res.cm;
+m  = derive_metrics_from_cm(cm);
+names{end+1} = 'CV_CM_11'; values(end+1) = cm(1,1);
+names{end+1} = 'CV_CM_12'; values(end+1) = cm(1,2);
+names{end+1} = 'CV_CM_21'; values(end+1) = cm(2,1);
+names{end+1} = 'CV_CM_22'; values(end+1) = cm(2,2);
+names{end+1} = 'CV_BalancedAcc_CM'; values(end+1) = m.balanced_acc;
+names{end+1} = 'CV_Sensitivity';     values(end+1) = m.sensitivity;
+names{end+1} = 'CV_Specificity';     values(end+1) = m.specificity;
+names{end+1} = 'CV_MCC';             values(end+1) = m.mcc;
+names{end+1} = 'CV_Kappa';           values(end+1) = m.kappa;
+names{end+1} = 'CV_PValue';          values(end+1) = cv_res.acc_p;
+
+%% ---- XCLASS metrics ----
+tags = fieldnames(xclass_out);
+for t = 1:numel(tags)
+    tag = tags{t};
+    X = xclass_out.(tag);
+    acc_list = cell2mat(X.acc_list);
+    auc_list = cell2mat(X.auc_list);
+    p_list   = cell2mat(X.p_list);
+    cm_list  = X.cm_list;
+
+    for r = 1:numel(acc_list)
+        cm_r = cm_list{r};
+        m_r  = derive_metrics_from_cm(cm_r);
+        names{end+1} = sprintf('XCLASS_%s_Run%02d_AccMinusChance', tag, r);
+        values(end+1) = acc_list(r);
+        names{end+1} = sprintf('XCLASS_%s_Run%02d_AUCminusChance', tag, r);
+        values(end+1) = auc_list(r);
+        names{end+1} = sprintf('XCLASS_%s_Run%02d_PValue', tag, r);
+        values(end+1) = p_list(r);
+        names{end+1} = sprintf('XCLASS_%s_Run%02d_CM11', tag, r);
+        values(end+1) = cm_r(1,1);
+        names{end+1} = sprintf('XCLASS_%s_Run%02d_CM12', tag, r);
+        values(end+1) = cm_r(1,2);
+        names{end+1} = sprintf('XCLASS_%s_Run%02d_CM21', tag, r);
+        values(end+1) = cm_r(2,1);
+        names{end+1} = sprintf('XCLASS_%s_Run%02d_CM22', tag, r);
+        values(end+1) = cm_r(2,2);
+        names{end+1} = sprintf('XCLASS_%s_Run%02d_BalancedAcc', tag, r);
+        values(end+1) = m_r.balanced_acc;
+        names{end+1} = sprintf('XCLASS_%s_Run%02d_Sensitivity', tag, r);
+        values(end+1) = m_r.sensitivity;
+        names{end+1} = sprintf('XCLASS_%s_Run%02d_Specificity', tag, r);
+        values(end+1) = m_r.specificity;
+        names{end+1} = sprintf('XCLASS_%s_Run%02d_MCC', tag, r);
+        values(end+1) = m_r.mcc;
+        names{end+1} = sprintf('XCLASS_%s_Run%02d_Kappa', tag, r);
+        values(end+1) = m_r.kappa;
+    end
+
+    m_tag = derive_metrics_from_cm(X.mean_cm);
+    names{end+1} = sprintf('XCLASS_%s_Mean_AccMinusChance', tag);
+    values(end+1) = X.acc_mean;
+    names{end+1} = sprintf('XCLASS_%s_Mean_AUCminusChance', tag);
+    values(end+1) = X.auc_mean;
+    names{end+1} = sprintf('XCLASS_%s_Mean_PValue', tag);
+    values(end+1) = X.acc_p;
+    names{end+1} = sprintf('XCLASS_%s_Mean_CM11', tag);
+    values(end+1) = X.mean_cm(1,1);
+    names{end+1} = sprintf('XCLASS_%s_Mean_CM12', tag);
+    values(end+1) = X.mean_cm(1,2);
+    names{end+1} = sprintf('XCLASS_%s_Mean_CM21', tag);
+    values(end+1) = X.mean_cm(2,1);
+    names{end+1} = sprintf('XCLASS_%s_Mean_CM22', tag);
+    values(end+1) = X.mean_cm(2,2);
+    names{end+1} = sprintf('XCLASS_%s_Mean_BalancedAcc', tag);
+    values(end+1) = m_tag.balanced_acc;
+    names{end+1} = sprintf('XCLASS_%s_Mean_Sensitivity', tag);
+    values(end+1) = m_tag.sensitivity;
+    names{end+1} = sprintf('XCLASS_%s_Mean_Specificity', tag);
+    values(end+1) = m_tag.specificity;
+    names{end+1} = sprintf('XCLASS_%s_Mean_MCC', tag);
+    values(end+1) = m_tag.mcc;
+    names{end+1} = sprintf('XCLASS_%s_Mean_Kappa', tag);
+    values(end+1) = m_tag.kappa;
+end
+
+tbl = array2table(values, 'VariableNames', names);
 end
 
 function m = derive_metrics_from_cm(cm)
