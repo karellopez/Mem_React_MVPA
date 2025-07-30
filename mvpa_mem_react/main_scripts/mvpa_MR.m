@@ -443,7 +443,11 @@ for i = 1:numel(fn)
     MCC(end+1,1)            = m.mcc;
     Kappa(end+1,1)          = m.kappa;
     AUCminusChance(end+1,1) = xclass_out.(tag).auc_mean;
-    AccPValue(end+1,1)      = xclass_out.(tag).acc_p;
+    % Use the mean of per-run p-values rather than the aggregate binomial
+    % statistic computed from the summed confusion matrix. This better
+    % reflects the average significance across runs.
+    pvals = cell2mat(xclass_out.(tag).p_list);
+    AccPValue(end+1,1)      = mean(pvals, 'omitnan');
 end
 
 tbl = table(RowID,Type,Tag,AccMinusChance_TDT,BalancedAcc,Sensitivity,Specificity,MCC,Kappa,AUCminusChance,AccPValue, ...
