@@ -39,7 +39,8 @@ clear; clc; close all
 %% Process each subject and store mean confusion matrices
 cm_means = struct();
 group_table = table();
-for i = 1:numel(mat_files)
+parpool("Processes")
+parfor i = 1:numel(mat_files)
 
     % mat files
     study_mat = mat_files{i};
