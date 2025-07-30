@@ -14,6 +14,8 @@ provides a reproducible pipeline for each subject.
 - Cross‑classification on additional label/run splits.
 - Outputs confusion matrices, PNG visualisations and a summary CSV with several
   performance metrics.
+- Also writes `summary_final.csv`, a single-row table containing every metric
+  computed for that subject (per run and averaged).
 - Computes binomial p-values via TDT's `decoding_statistics`.
 
 ## Usage
